@@ -15,7 +15,8 @@ tidy:
 clean:
 	rm -rf bin/ dist/
 
-release: clean
+release:
+	rm -rf dist
 	mkdir -p dist
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/kunjani-darwin-amd64 .
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/kunjani-darwin-arm64 .

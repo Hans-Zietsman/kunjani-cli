@@ -40,6 +40,10 @@ var uploadableMime = map[string]string{
 	".tif":  "image/tiff",
 	".mp3":  "audio/mpeg",
 	".mp4":  "video/mp4",
+	".wav":  "audio/wav",
+	".ogg":  "audio/ogg",
+	".opus": "audio/opus",
+	".webm": "audio/webm",
 	".pdf":  "application/pdf",
 }
 

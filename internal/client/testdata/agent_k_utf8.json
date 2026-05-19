@@ -1,0 +1,23 @@
+{
+  "outcomes": [
+    "Sample pre-seeded outcome with emoji 🎯 and bold 𝐭𝐞𝐱𝐭"
+  ],
+  "activities": [
+    {
+      "suit": "Oops",
+      "text": "🫁 Sucking wind! You skipped 𝐁𝐖𝐑𝐀𝐅 and at 15 m the regulator feels like a clamped straw.\n\nUnpack the 𝐧𝐞𝐠𝐚𝐭𝐢𝐯𝐞 𝐤𝐧𝐨𝐜𝐤-𝐨𝐧 𝐜𝐨𝐧𝐬𝐞𝐪𝐮𝐞𝐧𝐜𝐞𝐬 of skipping a pre-dive safety check.",
+      "answer": "• Restricted airflow forces you to 𝐰𝐨𝐫𝐤 𝐡𝐚𝐫𝐝𝐞𝐫 → CO₂ rises → panic onset\n• Panic at depth → 𝐫𝐚𝐩𝐢𝐝 𝐮𝐧𝐜𝐨𝐧𝐭𝐫𝐨𝐥𝐥𝐞𝐝 𝐚𝐬𝐜𝐞𝐧𝐭 → DCS or lung overexpansion\n• Trust erosion in the 𝐛𝐮𝐝𝐝𝐲 𝐭𝐞𝐚𝐦",
+      "time_in_seconds": 75,
+      "assessment_notes": "𝐆𝐫𝐚𝐝𝐢𝐧𝐠 𝐆𝐮𝐢𝐝𝐚𝐧𝐜𝐞\n• Accept any 3+ valid knock-on consequences\n• Reward chain-of-consequence thinking\n• Mark down responses that suggest \"ascend slowly to fix it\"\n\n𝐄𝐱𝐭𝐫𝐚 𝐂𝐨𝐧𝐭𝐞𝐱𝐭\n• BWRAF = PADI 5-point pre-dive safety check (BCD, Weights, Releases, Air, Final OK).\n• Knock-on means second/third-order effects, not the immediate sensation.",
+      "outcomes": ["Sample pre-seeded outcome with emoji 🎯 and bold 𝐭𝐞𝐱𝐭"]
+    },
+    {
+      "suit": "Jolt",
+      "text": "⚡ Quick recall. Type out what each letter of 𝐁𝐖𝐑𝐀𝐅 stands for:\n\n𝐁 = ?\n𝐖 = ?\n𝐑 = ?\n𝐀 = ?\n𝐅 = ?",
+      "answer": "• 𝐁 = BCD\n• 𝐖 = Weights\n• 𝐑 = Releases\n• 𝐀 = Air\n• 𝐅 = Final OK",
+      "time_in_seconds": 45,
+      "assessment_notes": "𝐆𝐫𝐚𝐝𝐢𝐧𝐠 𝐆𝐮𝐢𝐝𝐚𝐧𝐜𝐞\n• Must get all 5 letters\n• Accept variants (\"BCD\"/\"Buoyancy\", \"Final OK\"/\"OK ready\")\n• Order matters: B → W → R → A → F",
+      "outcomes": ["Sample pre-seeded outcome with emoji 🎯 and bold 𝐭𝐞𝐱𝐭"]
+    }
+  ]
+}
