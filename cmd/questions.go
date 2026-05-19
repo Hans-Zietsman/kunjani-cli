@@ -463,3 +463,151 @@ func expandPath(path string) string {
 	}
 	return abs
 }
+
+func newListQuestionsCmd(version string) *cobra.Command {
+	var (
+		deck int
+		suit string
+	)
+	cmd := &cobra.Command{
+		Use:   "list-questions",
+		Short: "List questions on a deck (paged internally, returns one flat slice)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cli, _, err := makeClient(version)
+			if err != nil {
+				return err
+			}
+			qs, err := cli.ListQuestions(ctx(), deck)
+			if err != nil {
+				return err
+			}
+			if suit != "" {
+				want := strings.ToLower(strings.TrimSpace(suit))
+				filtered := make([]any, 0, len(qs))
+				for _, q := range qs {
+					m, _ := q.(map[string]any)
+					if m == nil {
+						continue
+					}
+					s, _ := m["suit"].(map[string]any)
+					if s == nil {
+						continue
+					}
+					if strings.ToLower(stringOf(s["name"])) == want {
+						filtered = append(filtered, q)
+					}
+				}
+				qs = filtered
+			}
+
+			if gf.JSON {
+				return output.WriteJSON(os.Stdout, map[string]any{"questions": qs})
+			}
+			if len(qs) == 0 {
+				fmt.Fprintln(os.Stdout, "No questions on this deck.")
+				return nil
+			}
+			rows := [][]string{{"ID", "NAME", "SUIT", "TIME", "MEDIA"}}
+			for _, q := range qs {
+				m := q.(map[string]any)
+				suitName := ""
+				if s, ok := m["suit"].(map[string]any); ok {
+					suitName = stringOf(s["name"])
+				}
+				timeCell := ""
+				if t := stringOf(m["time_in_seconds"]); t != "" {
+					timeCell = t + "s"
+				}
+				media := "-"
+				if url, ok := m["picture_url"].(string); ok && url != "" {
+					media = pictureURLBasename(url)
+				}
+				rows = append(rows, []string{
+					stringOf(m["id"]),
+					stringOf(m["name"]),
+					suitName,
+					timeCell,
+					media,
+				})
+			}
+			output.PrintTable(os.Stdout, rows)
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&deck, "deck", 0, "Deck ID")
+	cmd.Flags().StringVar(&suit, "suit", "", "Optional case-insensitive suit filter (Jolt, Mystery, Advance, Oops, Explain, Demonstrate)")
+	cmd.MarkFlagRequired("deck")
+	return cmd
+}
+
+func newGetQuestionCmd(version string) *cobra.Command {
+	var (
+		deck     int
+		question int
+	)
+	cmd := &cobra.Command{
+		Use:   "get-question",
+		Short: "Show the full activity for one question on a deck",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cli, _, err := makeClient(version)
+			if err != nil {
+				return err
+			}
+			q, err := cli.GetQuestion(ctx(), deck, question)
+			if err != nil {
+				return err
+			}
+			if gf.JSON {
+				return output.WriteJSON(os.Stdout, map[string]any{"question": q})
+			}
+
+			suitName := ""
+			if s, ok := q["suit"].(map[string]any); ok {
+				suitName = stringOf(s["name"])
+			}
+			fmt.Fprintf(os.Stdout, "Question #%s %q (%s)\n", stringOf(q["id"]), stringOf(q["name"]), suitName)
+			if t := stringOf(q["time_in_seconds"]); t != "" {
+				fmt.Fprintf(os.Stdout, "Time: %ss\n", t)
+			}
+			if url, ok := q["picture_url"].(string); ok && url != "" {
+				fmt.Fprintf(os.Stdout, "Media: %s\n", url)
+			}
+			if outs, ok := q["outcomes"].([]any); ok && len(outs) > 0 {
+				descs := make([]string, 0, len(outs))
+				for _, o := range outs {
+					if m, ok := o.(map[string]any); ok {
+						descs = append(descs, stringOf(m["description"]))
+					}
+				}
+				if len(descs) > 0 {
+					fmt.Fprintf(os.Stdout, "Outcomes: %s\n", strings.Join(descs, "; "))
+				}
+			}
+			if txt := stringOf(q["text"]); txt != "" {
+				fmt.Fprintf(os.Stdout, "\nText:\n%s\n", txt)
+			}
+			if ans := stringOf(q["answer"]); ans != "" {
+				fmt.Fprintf(os.Stdout, "\nAnswer:\n%s\n", ans)
+			}
+			if notes := stringOf(q["assessment_notes"]); notes != "" {
+				fmt.Fprintf(os.Stdout, "\nAssessment notes:\n%s\n", notes)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&deck, "deck", 0, "Deck ID")
+	cmd.Flags().IntVar(&question, "question", 0, "Question ID")
+	cmd.MarkFlagRequired("deck")
+	cmd.MarkFlagRequired("question")
+	return cmd
+}
+
+func pictureURLBasename(url string) string {
+	if i := strings.Index(url, "?"); i >= 0 {
+		url = url[:i]
+	}
+	if i := strings.LastIndex(url, "/"); i >= 0 {
+		return url[i+1:]
+	}
+	return url
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -514,6 +515,116 @@ func TestCreateQuestionMultipartSendsOutcomeDescriptionsAsRepeatedFields(t *test
 	}
 	if q["id"].(float64) != 99 {
 		t.Errorf("id = %v", q["id"])
+	}
+}
+
+func TestListQuestionsPagesUntilShortPage(t *testing.T) {
+	calls := 0
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if got := r.URL.Query().Get("limit"); got != "50" {
+			t.Errorf("limit query = %q, want 50", got)
+		}
+		offset := r.URL.Query().Get("offset")
+		var items []map[string]any
+		switch offset {
+		case "", "0":
+			for i := 0; i < 50; i++ {
+				items = append(items, map[string]any{
+					"id":   float64(1000 + i),
+					"name": fmt.Sprintf("Q%d", i),
+				})
+			}
+			// Plant a UTF-8 sentinel on the last item of page 1.
+			items[49]["text"] = "🫁 Sucking wind! 𝐁𝐖𝐑𝐀𝐅"
+			items[49]["answer"] = "𝐧𝐞𝐠𝐚𝐭𝐢𝐯𝐞 𝐤𝐧𝐨𝐜𝐤-𝐨𝐧"
+			items[49]["assessment_notes"] = "𝐆𝐫𝐚𝐝𝐢𝐧𝐠"
+		case "50":
+			for i := 0; i < 27; i++ {
+				items = append(items, map[string]any{
+					"id":   float64(2000 + i),
+					"name": fmt.Sprintf("Q%d", 50+i),
+				})
+			}
+		default:
+			t.Fatalf("unexpected offset query: %q", offset)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"deck_id":   42,
+			"questions": items,
+		})
+	}))
+	defer srv.Close()
+
+	qs, err := c.ListQuestions(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("ListQuestions: %v", err)
+	}
+	if len(qs) != 77 {
+		t.Fatalf("got %d questions, want 77", len(qs))
+	}
+	if calls != 2 {
+		t.Errorf("got %d server calls, want 2 (one per page)", calls)
+	}
+
+	// UTF-8 read-path survival check.
+	p49 := qs[49].(map[string]any)
+	if txt, _ := p49["text"].(string); !strings.Contains(txt, "🫁") || !strings.Contains(txt, "𝐁") {
+		t.Errorf("emoji or math-bold lost on page 1 last item.\ntext: %q", txt)
+	}
+	if ans, _ := p49["answer"].(string); !strings.Contains(ans, "𝐧") {
+		t.Errorf("math-bold n lost in answer.\nanswer: %q", ans)
+	}
+	if notes, _ := p49["assessment_notes"].(string); !strings.Contains(notes, "𝐆") {
+		t.Errorf("math-bold G lost in assessment_notes.\nnotes: %q", notes)
+	}
+}
+
+func TestGetQuestionByID(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Single short page — pagination terminates after one call.
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"deck_id": 42,
+			"questions": []map[string]any{
+				{"id": float64(1), "name": "A", "text": "first"},
+				{"id": float64(40862), "name": "M2", "text": "🎧 audio Q", "suit": map[string]any{"name": "Mystery"}},
+				{"id": float64(3), "name": "C", "text": "third"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	q, err := c.GetQuestion(context.Background(), 42, 40862)
+	if err != nil {
+		t.Fatalf("GetQuestion: %v", err)
+	}
+	if q["name"] != "M2" {
+		t.Errorf("name = %v", q["name"])
+	}
+	if txt, _ := q["text"].(string); !strings.Contains(txt, "🎧") {
+		t.Errorf("headphones emoji missing.\ntext: %q", txt)
+	}
+}
+
+func TestGetQuestionNotFoundReturnsCleanError(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"deck_id":   42,
+			"questions": []map[string]any{{"id": float64(1), "name": "A"}, {"id": float64(2), "name": "B"}},
+		})
+	}))
+	defer srv.Close()
+
+	_, err := c.GetQuestion(context.Background(), 42, 999)
+	var nf *NotFoundError
+	if !errors.As(err, &nf) {
+		t.Fatalf("err type = %T (%v), want *NotFoundError", err, err)
+	}
+	if !strings.Contains(nf.Msg, "999") || !strings.Contains(nf.Msg, "42") {
+		t.Errorf("error message missing IDs: %q", nf.Msg)
 	}
 }
 

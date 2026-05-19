@@ -54,12 +54,49 @@ func mimeFor(path string) string {
 	return "application/octet-stream"
 }
 
+// ListQuestions returns every question on the deck, paging the API
+// internally. The Rails API caps a single response at 200 (Api::V1::Base
+// pagination_bounds); we ask for the server default of 50 per page so the
+// pagination boundary is exercised on smaller decks too.
 func (c *Client) ListQuestions(ctx context.Context, deckID int) ([]any, error) {
-	res, err := c.doJSON(ctx, "GET", fmt.Sprintf("/api/v1/decks/%d/questions", deckID), nil)
+	const pageSize = 50
+	var all []any
+	offset := 0
+	for {
+		path := fmt.Sprintf("/api/v1/decks/%d/questions?limit=%d&offset=%d", deckID, pageSize, offset)
+		res, err := c.doJSON(ctx, "GET", path, nil)
+		if err != nil {
+			return nil, err
+		}
+		page := asAnySlice(res["questions"])
+		all = append(all, page...)
+		if len(page) < pageSize {
+			return all, nil
+		}
+		offset += pageSize
+	}
+}
+
+// GetQuestion fetches a single question on a deck by numeric ID. The Rails
+// API doesn't ship a per-question GET yet (PR open as of writing), so we
+// walk the paged list. Returns *NotFoundError when the question isn't on
+// the deck — same shape callers already match elsewhere.
+func (c *Client) GetQuestion(ctx context.Context, deckID, questionID int) (map[string]any, error) {
+	questions, err := c.ListQuestions(ctx, deckID)
 	if err != nil {
 		return nil, err
 	}
-	return asAnySlice(res["questions"]), nil
+	for _, q := range questions {
+		m, ok := q.(map[string]any)
+		if !ok {
+			continue
+		}
+		// untyped JSON numbers come through as float64
+		if id, ok := m["id"].(float64); ok && int(id) == questionID {
+			return m, nil
+		}
+	}
+	return nil, &NotFoundError{Msg: fmt.Sprintf("question #%d not found on deck #%d", questionID, deckID)}
 }
 
 func (c *Client) CreateQuestion(ctx context.Context, deckID int, attrs QuestionAttrs) (map[string]any, error) {
