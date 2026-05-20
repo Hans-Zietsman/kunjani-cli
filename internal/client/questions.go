@@ -26,7 +26,42 @@ type QuestionAttrs struct {
 	HasOutcomeDescriptions   bool
 	RemovePicture            bool
 	RemoveFacilitatorPicture bool
+
+	// Each "Has*" boolean distinguishes "flag not provided" (don't send)
+	// from "flag set to empty string" (send empty to clear the field).
+
+	ExpectedAnswerFormat    string // general | image | video | voice
+	HasExpectedAnswerFormat bool
+
+	// YouTube/Vimeo URLs. The server auto-rewrites supported URLs to
+	// embed form on save. Start/end accept "MM:SS" or "S" strings.
+	VideoLink          string
+	HasVideoLink       bool
+	VideoLinkStart     string
+	HasVideoLinkStart  bool
+	VideoLinkEnd       string
+	HasVideoLinkEnd    bool
+
+	VideoLink2         string
+	HasVideoLink2      bool
+	VideoLink2Start    string
+	HasVideoLink2Start bool
+	VideoLink2End      string
+	HasVideoLink2End   bool
+
+	// Response-side alternative media. Start/end are stored as integer
+	// seconds server-side, but the API accepts a string and coerces.
+	AnswerMedia         string
+	HasAnswerMedia      bool
+	AnswerMediaStart    string
+	HasAnswerMediaStart bool
+	AnswerMediaEnd      string
+	HasAnswerMediaEnd   bool
 }
+
+// ValidAnswerFormats is the closed enum the Rails Question model accepts
+// for expected_answer_format. Empty string means "leave unchanged".
+var ValidAnswerFormats = []string{"general", "image", "video", "voice"}
 
 var uploadableMime = map[string]string{
 	".jpg":  "image/jpeg",
@@ -185,6 +220,37 @@ func questionJSONBody(a QuestionAttrs) map[string]any {
 		}
 		q["outcome_descriptions"] = descs
 	}
+
+	if a.HasExpectedAnswerFormat {
+		q["expected_answer_format"] = a.ExpectedAnswerFormat
+	}
+	if a.HasVideoLink {
+		q["video_link"] = a.VideoLink
+	}
+	if a.HasVideoLinkStart {
+		q["video_link_start"] = a.VideoLinkStart
+	}
+	if a.HasVideoLinkEnd {
+		q["video_link_end"] = a.VideoLinkEnd
+	}
+	if a.HasVideoLink2 {
+		q["video_link_2"] = a.VideoLink2
+	}
+	if a.HasVideoLink2Start {
+		q["video_link_2_start"] = a.VideoLink2Start
+	}
+	if a.HasVideoLink2End {
+		q["video_link_2_end"] = a.VideoLink2End
+	}
+	if a.HasAnswerMedia {
+		q["answer_media"] = a.AnswerMedia
+	}
+	if a.HasAnswerMediaStart {
+		q["answer_media_start"] = a.AnswerMediaStart
+	}
+	if a.HasAnswerMediaEnd {
+		q["answer_media_end"] = a.AnswerMediaEnd
+	}
 	return q
 }
 
@@ -242,6 +308,57 @@ func buildMultipart(a QuestionAttrs) ([]byte, string, error) {
 			if err := w.WriteField("question[outcome_descriptions][]", d); err != nil {
 				return nil, "", err
 			}
+		}
+	}
+
+	if a.HasExpectedAnswerFormat {
+		if err := writeField("expected_answer_format", a.ExpectedAnswerFormat); err != nil {
+			return nil, "", err
+		}
+	}
+	if a.HasVideoLink {
+		if err := writeField("video_link", a.VideoLink); err != nil {
+			return nil, "", err
+		}
+	}
+	if a.HasVideoLinkStart {
+		if err := writeField("video_link_start", a.VideoLinkStart); err != nil {
+			return nil, "", err
+		}
+	}
+	if a.HasVideoLinkEnd {
+		if err := writeField("video_link_end", a.VideoLinkEnd); err != nil {
+			return nil, "", err
+		}
+	}
+	if a.HasVideoLink2 {
+		if err := writeField("video_link_2", a.VideoLink2); err != nil {
+			return nil, "", err
+		}
+	}
+	if a.HasVideoLink2Start {
+		if err := writeField("video_link_2_start", a.VideoLink2Start); err != nil {
+			return nil, "", err
+		}
+	}
+	if a.HasVideoLink2End {
+		if err := writeField("video_link_2_end", a.VideoLink2End); err != nil {
+			return nil, "", err
+		}
+	}
+	if a.HasAnswerMedia {
+		if err := writeField("answer_media", a.AnswerMedia); err != nil {
+			return nil, "", err
+		}
+	}
+	if a.HasAnswerMediaStart {
+		if err := writeField("answer_media_start", a.AnswerMediaStart); err != nil {
+			return nil, "", err
+		}
+	}
+	if a.HasAnswerMediaEnd {
+		if err := writeField("answer_media_end", a.AnswerMediaEnd); err != nil {
+			return nil, "", err
 		}
 	}
 

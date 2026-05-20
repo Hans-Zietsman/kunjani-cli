@@ -25,6 +25,7 @@ func newAddQuestionCmd(version string) *cobra.Command {
 		picture         string
 		facilitatorPic  string
 		outcomes        string
+		extra           extraQuestionFlags
 	)
 	cmd := &cobra.Command{
 		Use:   "add-question",
@@ -59,6 +60,9 @@ func newAddQuestionCmd(version string) *cobra.Command {
 				attrs.HasOutcomeDescriptions = true
 				attrs.OutcomeDescriptions = splitOutcomes(outcomes)
 			}
+			if err := applyExtraQuestionFlags(cmd, &attrs, &extra); err != nil {
+				return err
+			}
 			q, err := cli.CreateQuestion(ctx(), deck, attrs)
 			if err != nil {
 				return err
@@ -84,6 +88,7 @@ func newAddQuestionCmd(version string) *cobra.Command {
 	cmd.Flags().StringVar(&picture, "picture", "", "Path to question media")
 	cmd.Flags().StringVar(&facilitatorPic, "facilitator-picture", "", "Path to facilitator media")
 	cmd.Flags().StringVar(&outcomes, "outcomes", "", "Comma-separated outcome descriptions")
+	registerExtraQuestionFlags(cmd, &extra)
 	cmd.MarkFlagRequired("deck")
 	cmd.MarkFlagRequired("suit")
 	cmd.MarkFlagRequired("text")
@@ -93,19 +98,20 @@ func newAddQuestionCmd(version string) *cobra.Command {
 
 func newUpdateQuestionCmd(version string) *cobra.Command {
 	var (
-		deck              int
-		question          int
-		suit              string
-		text              string
-		answer            string
-		timeSeconds       int
-		nameFlag          string
-		assessmentNotes   string
-		picture           string
-		facilitatorPic    string
-		removePic         bool
-		removeFacPic      bool
-		outcomes          string
+		deck            int
+		question        int
+		suit            string
+		text            string
+		answer          string
+		timeSeconds     int
+		nameFlag        string
+		assessmentNotes string
+		picture         string
+		facilitatorPic  string
+		removePic       bool
+		removeFacPic    bool
+		outcomes        string
+		extra           extraQuestionFlags
 	)
 	cmd := &cobra.Command{
 		Use:   "update-question",
@@ -142,6 +148,9 @@ func newUpdateQuestionCmd(version string) *cobra.Command {
 				attrs.HasOutcomeDescriptions = true
 				attrs.OutcomeDescriptions = splitOutcomes(outcomes)
 			}
+			if err := applyExtraQuestionFlags(cmd, &attrs, &extra); err != nil {
+				return err
+			}
 			q, err := cli.UpdateQuestion(ctx(), deck, question, attrs)
 			if err != nil {
 				return err
@@ -166,9 +175,113 @@ func newUpdateQuestionCmd(version string) *cobra.Command {
 	cmd.Flags().BoolVar(&removePic, "remove-picture", false, "Remove existing picture")
 	cmd.Flags().BoolVar(&removeFacPic, "remove-facilitator-picture", false, "Remove existing facilitator picture")
 	cmd.Flags().StringVar(&outcomes, "outcomes", "", `Comma-separated outcome descriptions; pass "" to clear all outcomes`)
+	registerExtraQuestionFlags(cmd, &extra)
 	cmd.MarkFlagRequired("deck")
 	cmd.MarkFlagRequired("question")
 	return cmd
+}
+
+// extraQuestionFlags groups the v0.2 additions so add-question and
+// update-question share one declaration. Each Has* propagation happens
+// in applyExtraQuestionFlags via cmd.Flags().Changed(...).
+type extraQuestionFlags struct {
+	answerFormat     string
+	videoLink        string
+	videoLinkStart   string
+	videoLinkEnd     string
+	videoLink2       string
+	videoLink2Start  string
+	videoLink2End    string
+	answerMedia      string
+	answerMediaStart string
+	answerMediaEnd   string
+}
+
+func registerExtraQuestionFlags(cmd *cobra.Command, e *extraQuestionFlags) {
+	cmd.Flags().StringVar(&e.answerFormat, "answer-format", "",
+		"Expected answer format (general, image, video, voice)")
+	cmd.Flags().StringVar(&e.videoLink, "video-link", "",
+		"YouTube/Vimeo URL embedded into the question (pass \"\" to clear)")
+	cmd.Flags().StringVar(&e.videoLinkStart, "video-link-start", "",
+		"Start timestamp for --video-link (e.g. 0:30)")
+	cmd.Flags().StringVar(&e.videoLinkEnd, "video-link-end", "",
+		"End timestamp for --video-link (e.g. 1:45)")
+	cmd.Flags().StringVar(&e.videoLink2, "video-link-2", "",
+		"Second YouTube/Vimeo URL (alternative media slot)")
+	cmd.Flags().StringVar(&e.videoLink2Start, "video-link-2-start", "",
+		"Start timestamp for --video-link-2")
+	cmd.Flags().StringVar(&e.videoLink2End, "video-link-2-end", "",
+		"End timestamp for --video-link-2")
+	cmd.Flags().StringVar(&e.answerMedia, "answer-media", "",
+		"YouTube/Vimeo URL attached to the suggested response side")
+	cmd.Flags().StringVar(&e.answerMediaStart, "answer-media-start", "",
+		"Start timestamp for --answer-media (seconds or M:S)")
+	cmd.Flags().StringVar(&e.answerMediaEnd, "answer-media-end", "",
+		"End timestamp for --answer-media (seconds or M:S)")
+}
+
+func applyExtraQuestionFlags(cmd *cobra.Command, a *client.QuestionAttrs, e *extraQuestionFlags) error {
+	if cmd.Flags().Changed("answer-format") {
+		norm, err := normalizeAnswerFormat(e.answerFormat)
+		if err != nil {
+			return err
+		}
+		a.HasExpectedAnswerFormat = true
+		a.ExpectedAnswerFormat = norm
+	}
+	if cmd.Flags().Changed("video-link") {
+		a.HasVideoLink = true
+		a.VideoLink = e.videoLink
+	}
+	if cmd.Flags().Changed("video-link-start") {
+		a.HasVideoLinkStart = true
+		a.VideoLinkStart = e.videoLinkStart
+	}
+	if cmd.Flags().Changed("video-link-end") {
+		a.HasVideoLinkEnd = true
+		a.VideoLinkEnd = e.videoLinkEnd
+	}
+	if cmd.Flags().Changed("video-link-2") {
+		a.HasVideoLink2 = true
+		a.VideoLink2 = e.videoLink2
+	}
+	if cmd.Flags().Changed("video-link-2-start") {
+		a.HasVideoLink2Start = true
+		a.VideoLink2Start = e.videoLink2Start
+	}
+	if cmd.Flags().Changed("video-link-2-end") {
+		a.HasVideoLink2End = true
+		a.VideoLink2End = e.videoLink2End
+	}
+	if cmd.Flags().Changed("answer-media") {
+		a.HasAnswerMedia = true
+		a.AnswerMedia = e.answerMedia
+	}
+	if cmd.Flags().Changed("answer-media-start") {
+		a.HasAnswerMediaStart = true
+		a.AnswerMediaStart = e.answerMediaStart
+	}
+	if cmd.Flags().Changed("answer-media-end") {
+		a.HasAnswerMediaEnd = true
+		a.AnswerMediaEnd = e.answerMediaEnd
+	}
+	return nil
+}
+
+func normalizeAnswerFormat(v string) (string, error) {
+	if v == "" {
+		return "", nil
+	}
+	norm := strings.ToLower(strings.TrimSpace(v))
+	for _, valid := range client.ValidAnswerFormats {
+		if norm == valid {
+			return norm, nil
+		}
+	}
+	return "", &client.GenericError{Msg: fmt.Sprintf(
+		"--answer-format must be one of %s (got %q)",
+		strings.Join(client.ValidAnswerFormats, ", "), v,
+	)}
 }
 
 func newBulkAddCmd(version string) *cobra.Command {
@@ -380,7 +493,56 @@ func activityToAttrs(a map[string]any, baseDir string) (client.QuestionAttrs, er
 		attrs.OutcomeDescriptions = descs
 	}
 
+	// expected_answer_format (also accept the shorter "answer_format" alias)
+	if v, ok := firstPresent(a, "expected_answer_format", "answer_format"); ok {
+		norm, err := normalizeAnswerFormat(stringOf(v))
+		if err != nil {
+			return attrs, err
+		}
+		attrs.HasExpectedAnswerFormat = true
+		attrs.ExpectedAnswerFormat = norm
+	}
+
+	// Alt-media URL slots — accept any value present in the JSON, stringify it.
+	type altMedia struct {
+		jsonKey string
+		has     *bool
+		target  *string
+	}
+	altMediaFields := []altMedia{
+		{"video_link", &attrs.HasVideoLink, &attrs.VideoLink},
+		{"video_link_start", &attrs.HasVideoLinkStart, &attrs.VideoLinkStart},
+		{"video_link_end", &attrs.HasVideoLinkEnd, &attrs.VideoLinkEnd},
+		{"video_link_2", &attrs.HasVideoLink2, &attrs.VideoLink2},
+		{"video_link_2_start", &attrs.HasVideoLink2Start, &attrs.VideoLink2Start},
+		{"video_link_2_end", &attrs.HasVideoLink2End, &attrs.VideoLink2End},
+		{"answer_media", &attrs.HasAnswerMedia, &attrs.AnswerMedia},
+		{"answer_media_start", &attrs.HasAnswerMediaStart, &attrs.AnswerMediaStart},
+		{"answer_media_end", &attrs.HasAnswerMediaEnd, &attrs.AnswerMediaEnd},
+	}
+	for _, f := range altMediaFields {
+		if v, ok := a[f.jsonKey]; ok {
+			*f.has = true
+			if v == nil {
+				*f.target = ""
+			} else {
+				*f.target = stringOf(v)
+			}
+		}
+	}
+
 	return attrs, nil
+}
+
+// firstPresent returns the value of the first key present in m, regardless
+// of whether the value is empty. Returns ok=false if no key is present.
+func firstPresent(m map[string]any, keys ...string) (any, bool) {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			return v, true
+		}
+	}
+	return nil, false
 }
 
 func numericField(a map[string]any, keys ...string) (int, bool) {
