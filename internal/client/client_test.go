@@ -122,6 +122,44 @@ func TestCreateDeckStripsNilValuesAndReturnsDeck(t *testing.T) {
 	}
 }
 
+func TestCreateDeckSendsDiceOptionWhenSet(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := readJSON(t, r)
+		deck := body["deck"].(map[string]any)
+		if deck["dice_option"] != "loaded" {
+			t.Errorf("dice_option = %v, want \"loaded\"", deck["dice_option"])
+		}
+		w.WriteHeader(201)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"deck":{"id":1,"name":"x","dice_option":"loaded"}}`))
+	}))
+	defer srv.Close()
+
+	_, err := c.CreateDeck(context.Background(), DeckCreate{Name: "x", DiceOption: "loaded"})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateDeckOmitsDiceOptionWhenBlank(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := readJSON(t, r)
+		deck := body["deck"].(map[string]any)
+		if _, has := deck["dice_option"]; has {
+			t.Errorf("dice_option should be omitted when DiceOption is empty")
+		}
+		w.WriteHeader(201)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"deck":{"id":1,"name":"x"}}`))
+	}))
+	defer srv.Close()
+
+	_, err := c.CreateDeck(context.Background(), DeckCreate{Name: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCreateQuestionPostsToNestedRoute(t *testing.T) {
 	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/decks/42/questions" {

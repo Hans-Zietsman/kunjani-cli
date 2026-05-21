@@ -3,12 +3,24 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Hans-Zietsman/kunjani-cli/internal/client"
 	"github.com/Hans-Zietsman/kunjani-cli/internal/output"
 )
+
+func normalizeDiceOption(raw string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "loaded":
+		return "loaded", nil
+	case "random":
+		return "random", nil
+	default:
+		return "", fmt.Errorf("--dice-option must be \"loaded\" or \"random\" (got %q)", raw)
+	}
+}
 
 func newListDecksCmd(version string) *cobra.Command {
 	return &cobra.Command{
@@ -47,12 +59,16 @@ func newListDecksCmd(version string) *cobra.Command {
 }
 
 func newCreateDeckCmd(version string) *cobra.Command {
-	var description, visibility, collaborations string
+	var description, visibility, collaborations, diceOption string
 	cmd := &cobra.Command{
 		Use:   "create-deck NAME",
 		Short: "Create a new deck",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dice, err := normalizeDiceOption(diceOption)
+			if err != nil {
+				return err
+			}
 			cli, _, err := makeClient(version)
 			if err != nil {
 				return err
@@ -61,6 +77,7 @@ func newCreateDeckCmd(version string) *cobra.Command {
 				Name:           args[0],
 				Visibility:     visibility,
 				Collaborations: collaborations,
+				DiceOption:     dice,
 			}
 			if cmd.Flags().Changed("description") {
 				attrs.Description = description
@@ -79,6 +96,7 @@ func newCreateDeckCmd(version string) *cobra.Command {
 	cmd.Flags().StringVar(&description, "description", "", "Description")
 	cmd.Flags().StringVar(&visibility, "visibility", "Private", "Public | Private")
 	cmd.Flags().StringVar(&collaborations, "collaborations", "No", "Yes | Organization | No")
+	cmd.Flags().StringVar(&diceOption, "dice-option", "loaded", "loaded | random — loaded plays activities in a set order; random picks from the rolled suit")
 	return cmd
 }
 

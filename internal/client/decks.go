@@ -10,6 +10,7 @@ type DeckCreate struct {
 	Description    string `json:"description,omitempty"`
 	Visibility     string `json:"visibility,omitempty"`
 	Collaborations string `json:"collaborations,omitempty"`
+	DiceOption     string `json:"dice_option,omitempty"`
 }
 
 func (c *Client) ListDecks(ctx context.Context) ([]any, error) {
@@ -46,6 +47,9 @@ func compactStruct(d DeckCreate) map[string]any {
 	}
 	if d.Collaborations != "" {
 		out["collaborations"] = d.Collaborations
+	}
+	if d.DiceOption != "" {
+		out["dice_option"] = d.DiceOption
 	}
 	return out
 }
