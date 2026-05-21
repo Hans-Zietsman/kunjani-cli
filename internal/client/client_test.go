@@ -160,6 +160,35 @@ func TestCreateDeckOmitsDiceOptionWhenBlank(t *testing.T) {
 	}
 }
 
+func TestReorderQuestionsPostsOrderAndReturnsDeck(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/v1/decks/42/reorder_questions" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		body := readJSON(t, r)
+		deck := body["deck"].(map[string]any)
+		order := deck["question_order"].([]any)
+		if len(order) != 3 || int(order[0].(float64)) != 17 || int(order[2].(float64)) != 5 {
+			t.Errorf("question_order = %v", order)
+		}
+		w.WriteHeader(200)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"deck":{"id":42,"name":"x","question_order":[17,9,5]}}`))
+	}))
+	defer srv.Close()
+
+	deck, err := c.ReorderQuestions(context.Background(), 42, []int{17, 9, 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int(deck["id"].(float64)) != 42 {
+		t.Errorf("id = %v", deck["id"])
+	}
+}
+
 func TestCreateQuestionPostsToNestedRoute(t *testing.T) {
 	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/decks/42/questions" {

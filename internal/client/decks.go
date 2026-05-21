@@ -34,6 +34,23 @@ func (c *Client) CreateDeck(ctx context.Context, attrs DeckCreate) (map[string]a
 	return deck, nil
 }
 
+// ReorderQuestions writes a new question order to the deck. The server
+// validates that every ID belongs to this deck and rejects the whole batch
+// otherwise. Returns the deck JSON, which echoes the saved question_order
+// back so the caller can verify.
+func (c *Client) ReorderQuestions(ctx context.Context, deckID int, order []int) (map[string]any, error) {
+	body := map[string]any{"deck": map[string]any{"question_order": order}}
+	res, err := c.doJSON(ctx, "POST", fmt.Sprintf("/api/v1/decks/%d/reorder_questions", deckID), body)
+	if err != nil {
+		return nil, err
+	}
+	deck, ok := res["deck"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("response missing 'deck' key")
+	}
+	return deck, nil
+}
+
 func compactStruct(d DeckCreate) map[string]any {
 	out := map[string]any{}
 	if d.Name != "" {

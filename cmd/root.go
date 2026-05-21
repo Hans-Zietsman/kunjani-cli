@@ -34,6 +34,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newWhoamiCmd(version))
 	root.AddCommand(newListDecksCmd(version))
 	root.AddCommand(newCreateDeckCmd(version))
+	root.AddCommand(newReorderQuestionsCmd(version))
 	root.AddCommand(newAddQuestionCmd(version))
 	root.AddCommand(newUpdateQuestionCmd(version))
 	root.AddCommand(newBulkAddCmd(version))
