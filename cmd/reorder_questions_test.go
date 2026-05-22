@@ -95,3 +95,20 @@ func TestDeleteQuestionCmdRequiresConfirm(t *testing.T) {
 		}
 	}
 }
+
+// Regression: passing --name "" (an intentional empty override) used to
+// trigger "nothing to update" because the zero struct comparison matched.
+// The fix tracks flag presence separately, so passing any flag — even with
+// an empty value — should NOT short-circuit with "nothing to update".
+func TestUpdateDeckCmdDoesNotShortCircuitOnEmptyFlag(t *testing.T) {
+	cmd := newUpdateDeckCmd("test")
+	cmd.SetArgs([]string{"--deck", "42", "--name", ""})
+
+	// We don't have a server to hit, but the RunE will reach makeClient()
+	// before the API call. Either way, the "nothing to update" error must NOT
+	// surface — that's the regression. We assert by capturing the error text.
+	err := cmd.Execute()
+	if err != nil && strings.Contains(err.Error(), "nothing to update") {
+		t.Errorf("update-deck regressed: --name \"\" triggered the empty-flags short-circuit (%v)", err)
+	}
+}

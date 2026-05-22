@@ -186,25 +186,34 @@ func newUpdateDeckCmd(version string) *cobra.Command {
 		Use:   "update-deck",
 		Short: "Update fields on an existing deck",
 		Long: "Update fields on an existing deck. Only flags you pass are sent;\n" +
-			"omitted flags leave the server-side value untouched. To clear a\n" +
-			"text field entirely, use the deck-builder UI (the CLI cannot\n" +
-			"distinguish an unset flag from --description \"\").",
+			"omitted flags leave the server-side value untouched. An empty\n" +
+			"string (e.g. --description \"\") is dropped on the wire and does\n" +
+			"not clear the field — to wipe a text field entirely, use the\n" +
+			"deck-builder UI.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if deck == 0 {
 				return fmt.Errorf("--deck is required")
 			}
+			// Track flag presence separately from the value — comparing the
+			// struct to zero would treat `--name ""` (an intentional empty
+			// override) as "nothing changed".
 			attrs := client.DeckUpdate{}
+			changed := false
 			if cmd.Flags().Changed("name") {
 				attrs.Name = name
+				changed = true
 			}
 			if cmd.Flags().Changed("description") {
 				attrs.Description = description
+				changed = true
 			}
 			if cmd.Flags().Changed("visibility") {
 				attrs.Visibility = visibility
+				changed = true
 			}
 			if cmd.Flags().Changed("collaborations") {
 				attrs.Collaborations = collaborations
+				changed = true
 			}
 			if cmd.Flags().Changed("dice-option") {
 				normalized, err := normalizeDiceOption(diceOpt)
@@ -212,8 +221,9 @@ func newUpdateDeckCmd(version string) *cobra.Command {
 					return err
 				}
 				attrs.DiceOption = normalized
+				changed = true
 			}
-			if attrs == (client.DeckUpdate{}) {
+			if !changed {
 				return fmt.Errorf("nothing to update — pass at least one of --name, --description, --visibility, --collaborations, --dice-option")
 			}
 			cli, _, err := makeClient(version)
