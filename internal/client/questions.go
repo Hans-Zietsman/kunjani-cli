@@ -112,26 +112,29 @@ func (c *Client) ListQuestions(ctx context.Context, deckID int) ([]any, error) {
 	}
 }
 
-// GetQuestion fetches a single question on a deck by numeric ID. The Rails
-// API doesn't ship a per-question GET yet (PR open as of writing), so we
-// walk the paged list. Returns *NotFoundError when the question isn't on
-// the deck — same shape callers already match elsewhere.
+// GetQuestion fetches a single question on a deck by numeric ID via the
+// per-question show endpoint. Server returns 404 when the question isn't on
+// the deck (surfaces here as *NotFoundError). Constant-time vs the deck's
+// question count.
 func (c *Client) GetQuestion(ctx context.Context, deckID, questionID int) (map[string]any, error) {
-	questions, err := c.ListQuestions(ctx, deckID)
+	res, err := c.doJSON(ctx, "GET", fmt.Sprintf("/api/v1/decks/%d/questions/%d", deckID, questionID), nil)
 	if err != nil {
 		return nil, err
 	}
-	for _, q := range questions {
-		m, ok := q.(map[string]any)
-		if !ok {
-			continue
-		}
-		// untyped JSON numbers come through as float64
-		if id, ok := m["id"].(float64); ok && int(id) == questionID {
-			return m, nil
-		}
+	q, ok := res["question"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("response missing 'question' key")
 	}
-	return nil, &NotFoundError{Msg: fmt.Sprintf("question #%d not found on deck #%d", questionID, deckID)}
+	return q, nil
+}
+
+// DeleteQuestion hard-deletes the question. Server returns 204 on success.
+// The question is removed from every deck it belonged to, not just this
+// one — server refuses with 403 if the caller can't edit each of those
+// decks.
+func (c *Client) DeleteQuestion(ctx context.Context, deckID, questionID int) error {
+	_, err := c.doJSON(ctx, "DELETE", fmt.Sprintf("/api/v1/decks/%d/questions/%d", deckID, questionID), nil)
+	return err
 }
 
 func (c *Client) CreateQuestion(ctx context.Context, deckID int, attrs QuestionAttrs) (map[string]any, error) {

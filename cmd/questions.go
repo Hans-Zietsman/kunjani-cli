@@ -764,6 +764,45 @@ func newGetQuestionCmd(version string) *cobra.Command {
 	return cmd
 }
 
+func newDeleteQuestionCmd(version string) *cobra.Command {
+	var (
+		deck     int
+		question int
+		force    bool
+	)
+	cmd := &cobra.Command{
+		Use:   "delete-question",
+		Short: "Hard-delete a question (removes from every deck it's on)",
+		Long: "Hard-delete a question. The question is destroyed entirely, not\n" +
+			"just decoupled from this deck — if it's shared with other decks,\n" +
+			"the server refuses with 403 unless you have edit access to all of\n" +
+			"them. Use --confirm to acknowledge.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !force {
+				return fmt.Errorf("refusing to delete without --confirm — this destroys the question and is not reversible")
+			}
+			cli, _, err := makeClient(version)
+			if err != nil {
+				return err
+			}
+			if err := cli.DeleteQuestion(ctx(), deck, question); err != nil {
+				return err
+			}
+			if gf.JSON {
+				return output.WriteJSON(os.Stdout, map[string]any{"deleted": question})
+			}
+			fmt.Fprintf(os.Stdout, "Deleted question #%d from deck #%d (and any other decks it was on)\n", question, deck)
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&deck, "deck", 0, "Deck ID (required)")
+	cmd.Flags().IntVar(&question, "question", 0, "Question ID (required)")
+	cmd.Flags().BoolVar(&force, "confirm", false, "Required — confirms you really want to destroy this question")
+	cmd.MarkFlagRequired("deck")
+	cmd.MarkFlagRequired("question")
+	return cmd
+}
+
 func pictureURLBasename(url string) string {
 	if i := strings.Index(url, "?"); i >= 0 {
 		url = url[:i]

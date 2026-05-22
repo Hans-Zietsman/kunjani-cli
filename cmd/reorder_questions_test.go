@@ -61,3 +61,37 @@ func TestReorderQuestionsCmdHasRequiredFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestGetDeckCmdHasDeckFlag(t *testing.T) {
+	if newGetDeckCmd("test").Flag("deck") == nil {
+		t.Error("--deck flag missing on get-deck")
+	}
+}
+
+func TestUpdateDeckCmdHasAllFlags(t *testing.T) {
+	cmd := newUpdateDeckCmd("test")
+	for _, name := range []string{"deck", "name", "description", "visibility", "collaborations", "dice-option"} {
+		if cmd.Flag(name) == nil {
+			t.Errorf("--%s flag missing on update-deck", name)
+		}
+	}
+}
+
+func TestDeleteDeckCmdRequiresConfirm(t *testing.T) {
+	cmd := newDeleteDeckCmd("test")
+	if cmd.Flag("confirm") == nil {
+		t.Error("--confirm flag missing on delete-deck")
+	}
+	if cmd.Flag("deck") == nil {
+		t.Error("--deck flag missing on delete-deck")
+	}
+}
+
+func TestDeleteQuestionCmdRequiresConfirm(t *testing.T) {
+	cmd := newDeleteQuestionCmd("test")
+	for _, name := range []string{"deck", "question", "confirm"} {
+		if cmd.Flag(name) == nil {
+			t.Errorf("--%s flag missing on delete-question", name)
+		}
+	}
+}

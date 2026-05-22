@@ -160,6 +160,117 @@ func TestCreateDeckOmitsDiceOptionWhenBlank(t *testing.T) {
 	}
 }
 
+func TestGetDeckHitsShowEndpoint(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		if r.URL.Path != "/api/v1/decks/42" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.WriteHeader(200)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"deck":{"id":42,"name":"x","dice_option":"loaded"}}`))
+	}))
+	defer srv.Close()
+
+	d, err := c.GetDeck(context.Background(), 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d["dice_option"] != "loaded" {
+		t.Errorf("dice_option = %v", d["dice_option"])
+	}
+}
+
+func TestUpdateDeckPatchesOnlyChangedFields(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "PATCH" {
+			t.Errorf("method = %s, want PATCH", r.Method)
+		}
+		if r.URL.Path != "/api/v1/decks/42" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		body := readJSON(t, r)
+		deck := body["deck"].(map[string]any)
+		if deck["dice_option"] != "random" {
+			t.Errorf("dice_option = %v, want \"random\"", deck["dice_option"])
+		}
+		// Only dice_option was set on the struct — everything else must be omitted.
+		for _, k := range []string{"name", "description", "visibility", "collaborations"} {
+			if _, has := deck[k]; has {
+				t.Errorf("expected %q to be omitted, got %v", k, deck[k])
+			}
+		}
+		w.WriteHeader(200)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"deck":{"id":42,"dice_option":"random"}}`))
+	}))
+	defer srv.Close()
+
+	_, err := c.UpdateDeck(context.Background(), 42, DeckUpdate{DiceOption: "random"})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeleteDeckSendsDELETE(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "DELETE" {
+			t.Errorf("method = %s, want DELETE", r.Method)
+		}
+		if r.URL.Path != "/api/v1/decks/42" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.WriteHeader(204)
+	}))
+	defer srv.Close()
+
+	if err := c.DeleteDeck(context.Background(), 42); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGetQuestionHitsShowEndpointDirectly(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		if r.URL.Path != "/api/v1/decks/42/questions/7" {
+			t.Errorf("path = %q (expected per-question show, not the index walk)", r.URL.Path)
+		}
+		w.WriteHeader(200)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"question":{"id":7,"name":"J1","text":"why"}}`))
+	}))
+	defer srv.Close()
+
+	q, err := c.GetQuestion(context.Background(), 42, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int(q["id"].(float64)) != 7 {
+		t.Errorf("id = %v", q["id"])
+	}
+}
+
+func TestDeleteQuestionSendsDELETE(t *testing.T) {
+	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "DELETE" {
+			t.Errorf("method = %s, want DELETE", r.Method)
+		}
+		if r.URL.Path != "/api/v1/decks/42/questions/7" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.WriteHeader(204)
+	}))
+	defer srv.Close()
+
+	if err := c.DeleteQuestion(context.Background(), 42, 7); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestReorderQuestionsPostsOrderAndReturnsDeck(t *testing.T) {
 	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -651,13 +762,12 @@ func TestListQuestionsPagesUntilShortPage(t *testing.T) {
 func TestGetQuestionByID(t *testing.T) {
 	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// Single short page — pagination terminates after one call.
+		// GetQuestion now hits the per-question show endpoint directly —
+		// constant time vs the deck size.
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"deck_id": 42,
-			"questions": []map[string]any{
-				{"id": float64(1), "name": "A", "text": "first"},
-				{"id": float64(40862), "name": "M2", "text": "🎧 audio Q", "suit": map[string]any{"name": "Mystery"}},
-				{"id": float64(3), "name": "C", "text": "third"},
+			"question": map[string]any{
+				"id": float64(40862), "name": "M2", "text": "🎧 audio Q",
+				"suit": map[string]any{"name": "Mystery"},
 			},
 		})
 	}))
@@ -677,10 +787,12 @@ func TestGetQuestionByID(t *testing.T) {
 
 func TestGetQuestionNotFoundReturnsCleanError(t *testing.T) {
 	c, srv := newTestClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Server returns 404 for a question that isn't on the deck — the
+		// client maps that to *NotFoundError via the standard handle() path.
+		w.WriteHeader(404)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"deck_id":   42,
-			"questions": []map[string]any{{"id": float64(1), "name": "A"}, {"id": float64(2), "name": "B"}},
+			"error": "question #999 not found on deck #42",
 		})
 	}))
 	defer srv.Close()

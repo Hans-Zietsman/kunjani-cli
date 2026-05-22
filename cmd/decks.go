@@ -74,13 +74,14 @@ func newListDecksCmd(version string) *cobra.Command {
 				fmt.Fprintln(os.Stdout, "No decks found.")
 				return nil
 			}
-			rows := [][]string{{"ID", "NAME", "VISIBILITY", "CREATED"}}
+			rows := [][]string{{"ID", "NAME", "VISIBILITY", "DICE", "CREATED"}}
 			for _, d := range decks {
 				m := d.(map[string]any)
 				rows = append(rows, []string{
 					stringOf(m["id"]),
 					stringOf(m["name"]),
 					stringOf(m["visibility"]),
+					stringOf(m["dice_option"]),
 					first10(stringOf(m["created_at"])),
 				})
 			}
@@ -137,6 +138,140 @@ func first10(s string) string {
 		return s
 	}
 	return s[:10]
+}
+
+func newGetDeckCmd(version string) *cobra.Command {
+	var deck int
+	cmd := &cobra.Command{
+		Use:   "get-deck",
+		Short: "Show a single deck by ID",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if deck == 0 {
+				return fmt.Errorf("--deck is required")
+			}
+			cli, _, err := makeClient(version)
+			if err != nil {
+				return err
+			}
+			d, err := cli.GetDeck(ctx(), deck)
+			if err != nil {
+				return err
+			}
+			if gf.JSON {
+				return output.WriteJSON(os.Stdout, map[string]any{"deck": d})
+			}
+			fmt.Fprintf(os.Stdout, "Deck #%s %q\n", stringOf(d["id"]), stringOf(d["name"]))
+			fmt.Fprintf(os.Stdout, "Visibility:   %s\n", stringOf(d["visibility"]))
+			fmt.Fprintf(os.Stdout, "Dice option:  %s\n", stringOf(d["dice_option"]))
+			if desc := stringOf(d["description"]); desc != "" {
+				fmt.Fprintf(os.Stdout, "Description:  %s\n", desc)
+			}
+			if order, ok := d["question_order"].([]any); ok && len(order) > 0 {
+				fmt.Fprintf(os.Stdout, "Custom order: %d question(s) pinned\n", len(order))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&deck, "deck", 0, "Deck ID (required)")
+	cmd.MarkFlagRequired("deck")
+	return cmd
+}
+
+func newUpdateDeckCmd(version string) *cobra.Command {
+	var (
+		deck                                                   int
+		name, description, visibility, collaborations, diceOpt string
+	)
+	cmd := &cobra.Command{
+		Use:   "update-deck",
+		Short: "Update fields on an existing deck",
+		Long: "Update fields on an existing deck. Only flags you pass are sent;\n" +
+			"omitted flags leave the server-side value untouched. To clear a\n" +
+			"text field entirely, use the deck-builder UI (the CLI cannot\n" +
+			"distinguish an unset flag from --description \"\").",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if deck == 0 {
+				return fmt.Errorf("--deck is required")
+			}
+			attrs := client.DeckUpdate{}
+			if cmd.Flags().Changed("name") {
+				attrs.Name = name
+			}
+			if cmd.Flags().Changed("description") {
+				attrs.Description = description
+			}
+			if cmd.Flags().Changed("visibility") {
+				attrs.Visibility = visibility
+			}
+			if cmd.Flags().Changed("collaborations") {
+				attrs.Collaborations = collaborations
+			}
+			if cmd.Flags().Changed("dice-option") {
+				normalized, err := normalizeDiceOption(diceOpt)
+				if err != nil {
+					return err
+				}
+				attrs.DiceOption = normalized
+			}
+			if attrs == (client.DeckUpdate{}) {
+				return fmt.Errorf("nothing to update — pass at least one of --name, --description, --visibility, --collaborations, --dice-option")
+			}
+			cli, _, err := makeClient(version)
+			if err != nil {
+				return err
+			}
+			d, err := cli.UpdateDeck(ctx(), deck, attrs)
+			if err != nil {
+				return err
+			}
+			if gf.JSON {
+				return output.WriteJSON(os.Stdout, map[string]any{"deck": d})
+			}
+			fmt.Fprintf(os.Stdout, "Updated deck #%s %q (dice=%s)\n", stringOf(d["id"]), stringOf(d["name"]), stringOf(d["dice_option"]))
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&deck, "deck", 0, "Deck ID (required)")
+	cmd.Flags().StringVar(&name, "name", "", "New name")
+	cmd.Flags().StringVar(&description, "description", "", "New description")
+	cmd.Flags().StringVar(&visibility, "visibility", "", "Public | Private")
+	cmd.Flags().StringVar(&collaborations, "collaborations", "", "Yes | Organization | No")
+	cmd.Flags().StringVar(&diceOpt, "dice-option", "", "loaded | random")
+	cmd.MarkFlagRequired("deck")
+	return cmd
+}
+
+func newDeleteDeckCmd(version string) *cobra.Command {
+	var deck int
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "delete-deck",
+		Short: "Hard-delete a deck (destroys all questions on it)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if deck == 0 {
+				return fmt.Errorf("--deck is required")
+			}
+			if !force {
+				return fmt.Errorf("refusing to delete without --confirm — this destroys the deck and is not reversible")
+			}
+			cli, _, err := makeClient(version)
+			if err != nil {
+				return err
+			}
+			if err := cli.DeleteDeck(ctx(), deck); err != nil {
+				return err
+			}
+			if gf.JSON {
+				return output.WriteJSON(os.Stdout, map[string]any{"deleted": deck})
+			}
+			fmt.Fprintf(os.Stdout, "Deleted deck #%d\n", deck)
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&deck, "deck", 0, "Deck ID (required)")
+	cmd.Flags().BoolVar(&force, "confirm", false, "Required — confirms you really want to destroy this deck")
+	cmd.MarkFlagRequired("deck")
+	return cmd
 }
 
 func newReorderQuestionsCmd(version string) *cobra.Command {
