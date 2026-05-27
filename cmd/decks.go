@@ -92,7 +92,7 @@ func newListDecksCmd(version string) *cobra.Command {
 }
 
 func newCreateDeckCmd(version string) *cobra.Command {
-	var description, visibility, collaborations, diceOption string
+	var description, visibility, collaborations, diceOption, picture string
 	cmd := &cobra.Command{
 		Use:   "create-deck NAME",
 		Short: "Create a new deck",
@@ -101,6 +101,11 @@ func newCreateDeckCmd(version string) *cobra.Command {
 			dice, err := normalizeDiceOption(diceOption)
 			if err != nil {
 				return err
+			}
+			if picture != "" {
+				if err := ensureReadableFile(picture, "--picture"); err != nil {
+					return err
+				}
 			}
 			cli, _, err := makeClient(version)
 			if err != nil {
@@ -111,6 +116,7 @@ func newCreateDeckCmd(version string) *cobra.Command {
 				Visibility:     visibility,
 				Collaborations: collaborations,
 				DiceOption:     dice,
+				Picture:        picture,
 			}
 			if cmd.Flags().Changed("description") {
 				attrs.Description = description
@@ -130,6 +136,7 @@ func newCreateDeckCmd(version string) *cobra.Command {
 	cmd.Flags().StringVar(&visibility, "visibility", "Private", "Public | Private")
 	cmd.Flags().StringVar(&collaborations, "collaborations", "No", "Yes | Organization | No")
 	cmd.Flags().StringVar(&diceOption, "dice-option", "loaded", "loaded | random — loaded plays activities in a set order; random picks from the rolled suit")
+	cmd.Flags().StringVar(&picture, "picture", "", "Path to a deck thumbnail image (JPEG/PNG/GIF/WEBP, ≤16MB)")
 	return cmd
 }
 
@@ -179,8 +186,9 @@ func newGetDeckCmd(version string) *cobra.Command {
 
 func newUpdateDeckCmd(version string) *cobra.Command {
 	var (
-		deck                                                   int
-		name, description, visibility, collaborations, diceOpt string
+		deck                                                            int
+		name, description, visibility, collaborations, diceOpt, picture string
+		removePicture                                                   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "update-deck",
@@ -223,8 +231,22 @@ func newUpdateDeckCmd(version string) *cobra.Command {
 				attrs.DiceOption = normalized
 				changed = true
 			}
+			if cmd.Flags().Changed("picture") && cmd.Flags().Changed("remove-picture") {
+				return fmt.Errorf("--picture and --remove-picture are mutually exclusive")
+			}
+			if cmd.Flags().Changed("picture") {
+				if err := ensureReadableFile(picture, "--picture"); err != nil {
+					return err
+				}
+				attrs.Picture = picture
+				changed = true
+			}
+			if cmd.Flags().Changed("remove-picture") && removePicture {
+				attrs.RemovePicture = true
+				changed = true
+			}
 			if !changed {
-				return fmt.Errorf("nothing to update — pass at least one of --name, --description, --visibility, --collaborations, --dice-option")
+				return fmt.Errorf("nothing to update — pass at least one of --name, --description, --visibility, --collaborations, --dice-option, --picture, --remove-picture")
 			}
 			cli, _, err := makeClient(version)
 			if err != nil {
@@ -247,8 +269,24 @@ func newUpdateDeckCmd(version string) *cobra.Command {
 	cmd.Flags().StringVar(&visibility, "visibility", "", "Public | Private")
 	cmd.Flags().StringVar(&collaborations, "collaborations", "", "Yes | Organization | No")
 	cmd.Flags().StringVar(&diceOpt, "dice-option", "", "loaded | random")
+	cmd.Flags().StringVar(&picture, "picture", "", "Path to a new deck thumbnail image (JPEG/PNG/GIF/WEBP, ≤16MB)")
+	cmd.Flags().BoolVar(&removePicture, "remove-picture", false, "Wipe the existing deck thumbnail")
 	cmd.MarkFlagRequired("deck")
 	return cmd
+}
+
+// ensureReadableFile errors out before the API round-trip if the supplied
+// flag value isn't a readable regular file. Mirrors `kunjani bulk-add`'s
+// fail-fast posture for activity media.
+func ensureReadableFile(path, flag string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("%s: %w", flag, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%s: %q is a directory, not a file", flag, path)
+	}
+	return nil
 }
 
 func newDeleteDeckCmd(version string) *cobra.Command {

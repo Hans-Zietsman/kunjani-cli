@@ -1,4 +1,4 @@
-VERSION ?= 0.3.0
+VERSION ?= 0.4.0
 LDFLAGS := -ldflags "-s -w -X main.Version=$(VERSION)"
 
 .PHONY: build test clean release tidy
